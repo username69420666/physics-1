@@ -92,6 +92,7 @@ void draw()
 	for (physicsSimulation::physicsBody& body : bodies)
 	{
 		DrawCircle(body.position.x, body.position.y, 15, RED);
+		DrawLineEx(body.position, body.position + body.velocity, 1, RED);
 	}
 
 	EndDrawing();
