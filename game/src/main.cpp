@@ -48,7 +48,7 @@ public:
 		position = conPosition;
 		velocity = conVelocity;
 		radius = conRadius;
-	}
+	}	
 	void draw() override
 	{
 		DrawCircle(position.x, position.y, radius, color);
@@ -58,13 +58,13 @@ public:
 
 physicsSimulation physicsSimulationObject;
 
-std::vector<physicsCircle> pObjects;
+std::vector<physicsCircle*> pObjects;
 
 void collision()
 {
 	for (int i = 0; i < pObjects.size(); i++)
 	{
-		pObjects[i].color = GREEN;
+		pObjects[i]->color = GREEN;
 	}
 	for (int i = 0; i < pObjects.size(); i++)
 	{
@@ -72,20 +72,32 @@ void collision()
 		{
 			if (i != j)
 			{
-				physicsCircle circleA = pObjects[i];
-				physicsCircle circleB = pObjects[j];
-
-				float sumRadii = circleA.radius + circleB.radius;
-				Vector2 displacement = circleB.position - circleA.position;
+				float sumRadii = pObjects[i]->radius + pObjects[j]->radius;
+				Vector2 displacement = pObjects[j]->position - pObjects[i]->position;
 
 				float distance = Vector2Length(displacement);
 
 				if (distance < sumRadii)
 				{
-					pObjects[i].color = RED;
-					pObjects[j].color = RED;
+					pObjects[i]->color = RED;
+					pObjects[j]->color = RED;
 				}
 			}
+		}
+	}
+}
+void deletion()
+{
+	for (int i = 0; i < pObjects.size(); i++)
+	{
+		if (pObjects[i]->position.y > GetScreenHeight()
+			|| pObjects[i]->position.y < 0
+			|| pObjects[i]->position.x > GetScreenWidth()
+			|| pObjects[i]->position.x < 0)
+		{
+			delete* (pObjects.begin() + i);
+			pObjects.erase(pObjects.begin() + i);
+			i--;
 		}
 	}
 }
@@ -95,10 +107,10 @@ void update()
 {
 	physicsSimulationObject.time += physicsSimulationObject.deltaTime;
 	physicsSimulationObject.gravity = { gravMag * (float)cos(gravDir * DEG2RAD), -gravMag * (float)sin(gravDir * DEG2RAD) };
-	for (physicsCircle& pObject : pObjects)
+	for (int i = 0; i < pObjects.size(); i++)
 	{
-		pObject.position += pObject.velocity * physicsSimulationObject.deltaTime;
-		pObject.velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+		pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
+		pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
 	}
 	//vel = change in position / time, therefore change in position = vel * time
 	
@@ -113,10 +125,11 @@ void update()
 	{
 		Vector2 velocity = {launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD)};
 		float newRadius = 15;
-		physicsCircle newCircle(launchPosition, velocity, newRadius);
-		pObjects.emplace_back(newCircle);
+		physicsCircle* newCircle = new physicsCircle(launchPosition, velocity, newRadius);
+		pObjects.push_back(newCircle);
 	}
 	collision();
+	deletion();
 }
 
 //Display world state
@@ -137,16 +150,16 @@ void draw()
 
 	GuiSliderBar(Rectangle{ 10, 200, 500, 30 }, "Gravity Direction", TextFormat("Direction: %.0f Degrees", gravDir), &gravDir, 0, 360);
 
-
-
+	int objectCount = pObjects.size();
+	DrawText(TextFormat("Object Count: %i", objectCount), GetScreenWidth() - 300, 100, 30, LIGHTGRAY);
 	DrawText(TextFormat("T: %6.2f", physicsSimulationObject.time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
 	Vector2 velocity = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD)};
 
 	DrawLineEx(launchPosition, launchPosition + velocity, 3, RED);
-	for (physicsCircle& pObject : pObjects)
+	for (int i = 0; i < pObjects.size(); i++)
 	{
-		pObject.draw();
+		pObjects[i]->draw();
 	}
 
 	EndDrawing();
