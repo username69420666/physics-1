@@ -28,25 +28,77 @@ public:
 	class physicsBody
 	{
 	public:
-		Vector2 position;
-		Vector2 velocity;
-		Vector2 drag;
-		float mass;
+		Vector2 position = { 0,0 };
+		Vector2 velocity = { 0,0 };
+		Vector2 drag = { 0, 0 };
+		float mass = 1;
+		virtual void draw()
+		{
+			DrawText("Nothing to draw here!", position.x, position.y, 5, RED);
+		};
 	};
 };
-physicsSimulation physicsSimulationObject {};
+class physicsCircle : public physicsSimulation::physicsBody
+{
+public:
+	float radius = 15;
+	Color color = GREEN;
+	physicsCircle(Vector2 conPosition, Vector2 conVelocity, float conRadius)
+	{
+		position = conPosition;
+		velocity = conVelocity;
+		radius = conRadius;
+	}
+	void draw() override
+	{
+		DrawCircle(position.x, position.y, radius, color);
+		DrawLineEx(position, position + velocity, 1, color);
+	}
+};
 
-std::vector<physicsSimulation::physicsBody> bodies;
+physicsSimulation physicsSimulationObject;
+
+std::vector<physicsCircle> pObjects;
+
+void collision()
+{
+	for (int i = 0; i < pObjects.size(); i++)
+	{
+		pObjects[i].color = GREEN;
+	}
+	for (int i = 0; i < pObjects.size(); i++)
+	{
+		for (int j = 0; j < pObjects.size(); j++)
+		{
+			if (i != j)
+			{
+				physicsCircle circleA = pObjects[i];
+				physicsCircle circleB = pObjects[j];
+
+				float sumRadii = circleA.radius + circleB.radius;
+				Vector2 displacement = circleB.position - circleA.position;
+
+				float distance = Vector2Length(displacement);
+
+				if (distance < sumRadii)
+				{
+					pObjects[i].color = RED;
+					pObjects[j].color = RED;
+				}
+			}
+		}
+	}
+}
 
 //Changes world state
 void update()
 {
 	physicsSimulationObject.time += physicsSimulationObject.deltaTime;
 	physicsSimulationObject.gravity = { gravMag * (float)cos(gravDir * DEG2RAD), -gravMag * (float)sin(gravDir * DEG2RAD) };
-	for (physicsSimulation::physicsBody& body : bodies)
+	for (physicsCircle& pObject : pObjects)
 	{
-		body.position += body.velocity * physicsSimulationObject.deltaTime;
-		body.velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+		pObject.position += pObject.velocity * physicsSimulationObject.deltaTime;
+		pObject.velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
 	}
 	//vel = change in position / time, therefore change in position = vel * time
 	
@@ -60,8 +112,11 @@ void update()
 	if (IsKeyPressed(KEY_SPACE))
 	{
 		Vector2 velocity = {launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD)};
-		bodies.emplace_back(physicsSimulation::physicsBody{ launchPosition, velocity });
+		float newRadius = 15;
+		physicsCircle newCircle(launchPosition, velocity, newRadius);
+		pObjects.emplace_back(newCircle);
 	}
+	collision();
 }
 
 //Display world state
@@ -89,10 +144,9 @@ void draw()
 	Vector2 velocity = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD)};
 
 	DrawLineEx(launchPosition, launchPosition + velocity, 3, RED);
-	for (physicsSimulation::physicsBody& body : bodies)
+	for (physicsCircle& pObject : pObjects)
 	{
-		DrawCircle(body.position.x, body.position.y, 15, RED);
-		DrawLineEx(body.position, body.position + body.velocity, 1, RED);
+		pObject.draw();
 	}
 
 	EndDrawing();
