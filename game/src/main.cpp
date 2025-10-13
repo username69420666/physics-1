@@ -95,7 +95,8 @@ void deletion()
 			|| pObjects[i]->position.x > GetScreenWidth()
 			|| pObjects[i]->position.x < 0)
 		{
-			delete* (pObjects.begin() + i);
+			physicsSimulation::physicsBody* deleteThis = *(pObjects.begin() + i);
+			delete deleteThis;
 			pObjects.erase(pObjects.begin() + i);
 			i--;
 		}
