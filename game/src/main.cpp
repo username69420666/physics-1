@@ -150,8 +150,7 @@ void draw()
 
 	GuiSliderBar(Rectangle{ 10, 200, 500, 30 }, "Gravity Direction", TextFormat("Direction: %.0f Degrees", gravDir), &gravDir, 0, 360);
 
-	int objectCount = pObjects.size();
-	DrawText(TextFormat("Object Count: %i", objectCount), GetScreenWidth() - 300, 100, 30, LIGHTGRAY);
+	DrawText(TextFormat("Object Count: %i", pObjects.size()), GetScreenWidth() - 300, 100, 30, LIGHTGRAY);
 	DrawText(TextFormat("T: %6.2f", physicsSimulationObject.time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
 	Vector2 velocity = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD)};
