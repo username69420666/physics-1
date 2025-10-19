@@ -19,6 +19,12 @@ float gravDir = 270;
 
 Vector2 launchPosition = { 500, 500 };
 
+enum physicsShape
+{
+	CIRCLE,
+	HALFSPACE
+};
+
 class physicsSimulation
 {
 public:
@@ -28,21 +34,26 @@ public:
 	class physicsBody
 	{
 	public:
+		bool staticBody = false;
+
 		Vector2 position = { 0,0 };
 		Vector2 velocity = { 0,0 };
 		Vector2 drag = { 0, 0 };
 		float mass = 1;
+		Color color = GREEN;
 		virtual void draw()
 		{
 			DrawText("Nothing to draw here!", position.x, position.y, 5, RED);
 		};
+
+		virtual physicsShape Shape() = 0;
 	};
 };
+
 class physicsCircle : public physicsSimulation::physicsBody
 {
 public:
 	float radius = 15;
-	Color color = GREEN;
 	physicsCircle(Vector2 conPosition, Vector2 conVelocity, float conRadius)
 	{
 		position = conPosition;
@@ -54,11 +65,76 @@ public:
 		DrawCircle(position.x, position.y, radius, color);
 		DrawLineEx(position, position + velocity, 1, color);
 	}
+	physicsShape Shape() override
+	{
+		return CIRCLE;
+	}
+};
+
+class physicsHalfspace : public physicsSimulation::physicsBody
+{
+private:
+	float rotation = 0;
+	Vector2 normal = { 0, -1 };
+public:
+	void setRotation(float rotationInDegrees)
+	{
+		rotation = rotationInDegrees;
+		normal = Vector2Rotate({ 0, -1 }, rotation * DEG2RAD);
+	}
+
+	float getRotation()
+	{
+		return rotation;
+	}
+	Vector2 getNormal()
+	{
+		return normal;
+	}
+	void draw() override
+	{
+		DrawCircle(position.x, position.y, 8, color);
+		DrawLineEx(position, position + normal * 30, 1, color);
+
+		Vector2 parallelToSurface = Vector2Rotate(normal, 90 * DEG2RAD);
+		DrawLineEx(position - parallelToSurface * 4000, position + parallelToSurface * 4000, 1, color);
+	}
+	physicsShape Shape() override
+	{
+		return HALFSPACE;
+	}
 };
 
 physicsSimulation physicsSimulationObject;
+physicsHalfspace halfspace;
 
-std::vector<physicsCircle*> pObjects;
+std::vector<physicsSimulation::physicsBody*> pObjects;
+
+bool circleCircleCollision(physicsCircle* circleA, physicsCircle* circleB)
+{
+	float sumRadii = circleA->radius + circleB->radius;
+	Vector2 displacement = circleB->position - circleA->position;
+
+	float distance = Vector2Length(displacement);
+
+	return (distance < sumRadii) ? true : false;
+}
+
+bool circleHalfspaceCollision(physicsCircle* circle, physicsHalfspace* halfspace)
+{
+	Vector2 displacementToCircle = circle->position - halfspace->position;
+
+	float dotProduct = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
+	Vector2 vectorProjection = halfspace->getNormal() * dotProduct;
+	//float distance = Vector2Length(displacementToCircle);
+
+	DrawLineEx(circle->position, circle->position - vectorProjection, 1, GRAY);
+
+	Vector2 midpoint = circle->position - vectorProjection * 0.5f;
+	DrawText(TextFormat("D: %3.0f", dotProduct), midpoint.x, midpoint.y, 30, LIGHTGRAY);
+
+	return (dotProduct <= 0) ? true : false;
+}
 
 void collision()
 {
@@ -72,20 +148,33 @@ void collision()
 		{
 			if (i != j)
 			{
-				float sumRadii = pObjects[i]->radius + pObjects[j]->radius;
-				Vector2 displacement = pObjects[j]->position - pObjects[i]->position;
+				physicsSimulation::physicsBody* objectA = pObjects[i];
+				physicsSimulation::physicsBody* objectB = pObjects[j];
 
-				float distance = Vector2Length(displacement);
+				physicsShape shapeA = objectA->Shape();
+				physicsShape shapeB = objectB->Shape();
 
-				if (distance < sumRadii)
+				bool didOverlap = false;
+
+				if (shapeA == CIRCLE && shapeB == CIRCLE)
+					didOverlap = circleCircleCollision((physicsCircle*)objectA, (physicsCircle*)objectB);
+
+				else if (shapeA == CIRCLE && shapeB == HALFSPACE)
+					didOverlap = circleHalfspaceCollision((physicsCircle*)objectA, (physicsHalfspace*)objectB);
+
+				else if (shapeB == CIRCLE && shapeA == HALFSPACE)
+					didOverlap = circleHalfspaceCollision((physicsCircle*)objectB, (physicsHalfspace*)objectA);
+
+				if (didOverlap)
 				{
-					pObjects[i]->color = RED;
-					pObjects[j]->color = RED;
+					objectA->color = RED;
+					objectB->color = RED;
 				}
 			}
 		}
 	}
 }
+
 void deletion()
 {
 	for (int i = 0; i < pObjects.size(); i++)
@@ -110,8 +199,11 @@ void update()
 	physicsSimulationObject.gravity = { gravMag * (float)cos(gravDir * DEG2RAD), -gravMag * (float)sin(gravDir * DEG2RAD) };
 	for (int i = 0; i < pObjects.size(); i++)
 	{
-		pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
-		pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+		if (!pObjects[i]->staticBody)
+		{
+			pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
+			pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+		}
 	}
 	//vel = change in position / time, therefore change in position = vel * time
 	
@@ -122,6 +214,7 @@ void update()
 
 	if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
         launchPosition = GetMousePosition();
+
 	if (IsKeyPressed(KEY_SPACE))
 	{
 		Vector2 velocity = {launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD)};
@@ -151,9 +244,18 @@ void draw()
 
 	GuiSliderBar(Rectangle{ 10, 200, 500, 30 }, "Gravity Direction", TextFormat("Direction: %.0f Degrees", gravDir), &gravDir, 0, 360);
 
+	GuiSliderBar(Rectangle{ 10, 240, 500, 30 }, "Halfspace X", TextFormat("Halfspace X: %.0f", halfspace.position.x), &halfspace.position.x, 0, GetScreenWidth());
+
+	GuiSliderBar(Rectangle{ 10, 280, 500, 30 }, "Halfspace Y", TextFormat("Halfspace Y: %.0f", halfspace.position.y), &halfspace.position.y, 0, GetScreenHeight());
+
+	float halfspaceRotation = halfspace.getRotation();
+	GuiSliderBar(Rectangle{ 10, 320, 500, 30 }, "Halfspace Rot", TextFormat("Halfspace Rot: %.0f Degrees", halfspace.getRotation()), &halfspaceRotation, -360, 360);
+	halfspace.setRotation(halfspaceRotation);
+
 	DrawText(TextFormat("Object Count: %i", pObjects.size()), GetScreenWidth() - 300, 100, 30, LIGHTGRAY);
 	DrawText(TextFormat("T: %6.2f", physicsSimulationObject.time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
+	Vector2 startPos = { 100, GetScreenHeight() - 100 };
 	Vector2 velocity = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD)};
 
 	DrawLineEx(launchPosition, launchPosition + velocity, 3, RED);
@@ -163,13 +265,15 @@ void draw()
 	}
 
 	EndDrawing();
-
 }
 
 int main()
 {
 	InitWindow(InitialWidth, InitialHeight, "GAME2005 Michael McKall 101551503");
 	SetTargetFPS(TARGET_FPS);
+	halfspace.position = { 500, 700 };
+	halfspace.staticBody = true;
+	pObjects.push_back(&halfspace);
 
 	while (!WindowShouldClose()) // Loops TARGET_FPS times per second
 	{
