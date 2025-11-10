@@ -107,6 +107,7 @@ public:
 
 physicsSimulation physicsSimulationObject;
 physicsHalfspace halfspace;
+physicsHalfspace halfspace2;
 
 std::vector<physicsSimulation::physicsBody*> pObjects;
 
@@ -118,6 +119,30 @@ bool circleCircleCollision(physicsCircle* circleA, physicsCircle* circleB)
 	float distance = Vector2Length(displacement);
 
 	return (distance < sumRadii) ? true : false;
+}
+
+bool circleCircleCollisionResponse(physicsCircle* circleA, physicsCircle* circleB)
+{
+	float sumRadii = circleA->radius + circleB->radius;
+	Vector2 displacement = circleB->position - circleA->position;
+
+	float distance = Vector2Length(displacement);
+	float overlap = sumRadii - distance;
+
+	if (overlap > 0)
+	{
+		Vector2 normalAtoB;
+		if (!distance)
+			normalAtoB = { 0, 1 };
+		else
+			normalAtoB = displacement / distance;
+		Vector2 mtv = normalAtoB * overlap; // Minimum translation vector (to push apart for collision)
+		circleA->position -= mtv * 0.5f;
+		circleB->position += mtv * 0.5f;
+		return true;
+	}
+	else
+		return false;
 }
 
 bool circleHalfspaceCollision(physicsCircle* circle, physicsHalfspace* halfspace)
@@ -133,7 +158,34 @@ bool circleHalfspaceCollision(physicsCircle* circle, physicsHalfspace* halfspace
 	Vector2 midpoint = circle->position - vectorProjection * 0.5f;
 	DrawText(TextFormat("D: %3.0f", dotProduct), midpoint.x, midpoint.y, 30, LIGHTGRAY);
 
-	return (dotProduct <= 0) ? true : false;
+	return dotProduct < circle->radius;
+}
+
+bool circleHalfspaceCollisionResponse(physicsCircle* circle, physicsHalfspace* halfspace)
+{
+	Vector2 displacementToCircle = circle->position - halfspace->position;
+
+	float dotProduct = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
+	Vector2 vectorProjection = halfspace->getNormal() * dotProduct;
+	//float distance = Vector2Length(displacementToCircle);
+
+	//DrawLineEx(circle->position, circle->position - vectorProjection, 1, GRAY);
+
+	//Vector2 midpoint = circle->position - vectorProjection * 0.5f;
+	//DrawText(TextFormat("D: %3.0f", dotProduct), midpoint.x, midpoint.y, 30, LIGHTGRAY);
+
+	float overlap = circle->radius - dotProduct;
+
+	if (overlap > 0)
+	{
+		Vector2 mtv = halfspace->getNormal() * overlap;
+		circle->position += mtv;
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 void collision()
@@ -157,13 +209,13 @@ void collision()
 				bool didOverlap = false;
 
 				if (shapeA == CIRCLE && shapeB == CIRCLE)
-					didOverlap = circleCircleCollision((physicsCircle*)objectA, (physicsCircle*)objectB);
+					didOverlap = circleCircleCollisionResponse((physicsCircle*)objectA, (physicsCircle*)objectB);
 
 				else if (shapeA == CIRCLE && shapeB == HALFSPACE)
-					didOverlap = circleHalfspaceCollision((physicsCircle*)objectA, (physicsHalfspace*)objectB);
+					didOverlap = circleHalfspaceCollisionResponse((physicsCircle*)objectA, (physicsHalfspace*)objectB);
 
 				else if (shapeB == CIRCLE && shapeA == HALFSPACE)
-					didOverlap = circleHalfspaceCollision((physicsCircle*)objectB, (physicsHalfspace*)objectA);
+					didOverlap = circleHalfspaceCollisionResponse((physicsCircle*)objectB, (physicsHalfspace*)objectA);
 
 				if (didOverlap)
 				{
@@ -273,7 +325,13 @@ int main()
 	SetTargetFPS(TARGET_FPS);
 	halfspace.position = { 500, 700 };
 	halfspace.staticBody = true;
+	halfspace.setRotation(315);
 	pObjects.push_back(&halfspace);
+
+	halfspace2.position = { 400, 600 };
+	halfspace2.staticBody = true;
+	halfspace2.setRotation(45);
+	pObjects.push_back(&halfspace2);
 
 	while (!WindowShouldClose()) // Loops TARGET_FPS times per second
 	{
