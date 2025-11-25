@@ -11,11 +11,12 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 #include "vector"
 
 const unsigned int TARGET_FPS = 50; //frames/second
-
+int ballType = 0;
 float launchSpeed = 100;
 float launchAngle = 0;
 float gravMag = 100;
 float gravDir = 270;
+//float coefficientOfFriction = 0.5f;
 
 Vector2 launchPosition = { 500, 500 };
 
@@ -28,6 +29,7 @@ enum physicsShape
 class physicsSimulation
 {
 public:
+	Vector2 gravAccel = { 0, 90 };
 	float deltaTime = 1.0f / TARGET_FPS; //seconds/frame
 	float time = 0.0f;
 	Vector2 gravity = { launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD) };
@@ -35,12 +37,12 @@ public:
 	{
 	public:
 		bool staticBody = false;
-
-		Vector2 position = { 0,0 };
-		Vector2 velocity = { 0,0 };
-		Vector2 drag = { 0, 0 };
 		float mass = 1;
+		Vector2 position = { 0, 0 };
+		Vector2 velocity = { 0, 0 };
+		Vector2 drag = { 0, 0 };
 		Color color = GREEN;
+		Vector2 netForce = { 0, 0 };
 		virtual void draw()
 		{
 			DrawText("Nothing to draw here!", position.x, position.y, 5, RED);
@@ -54,16 +56,21 @@ class physicsCircle : public physicsSimulation::physicsBody
 {
 public:
 	float radius = 15;
-	physicsCircle(Vector2 conPosition, Vector2 conVelocity, float conRadius)
+	float coefficientOfFriction = 0.5f;
+	
+	physicsCircle(Vector2 conPosition, Vector2 conVelocity, float conRadius, float conCoefficientOfFriction, int conMass, Color conColor)
 	{
 		position = conPosition;
 		velocity = conVelocity;
 		radius = conRadius;
-	}	
+		coefficientOfFriction = conCoefficientOfFriction;
+		mass = conMass;
+		color = conColor;
+	}
 	void draw() override
 	{
 		DrawCircle(position.x, position.y, radius, color);
-		DrawLineEx(position, position + velocity, 1, color);
+		DrawLineEx(position, position + velocity, 1, RED);
 	}
 	physicsShape Shape() override
 	{
@@ -107,19 +114,19 @@ public:
 
 physicsSimulation physicsSimulationObject;
 physicsHalfspace halfspace;
-physicsHalfspace halfspace2;
+//physicsHalfspace halfspace2;
 
 std::vector<physicsSimulation::physicsBody*> pObjects;
 
-bool circleCircleCollision(physicsCircle* circleA, physicsCircle* circleB)
-{
-	float sumRadii = circleA->radius + circleB->radius;
-	Vector2 displacement = circleB->position - circleA->position;
-
-	float distance = Vector2Length(displacement);
-
-	return (distance < sumRadii) ? true : false;
-}
+//bool circleCircleCollision(physicsCircle* circleA, physicsCircle* circleB)
+//{
+//	float sumRadii = circleA->radius + circleB->radius;
+//	Vector2 displacement = circleB->position - circleA->position;
+//
+//	float distance = Vector2Length(displacement);
+//
+//	return (distance < sumRadii) ? true : false;
+//}
 
 bool circleCircleCollisionResponse(physicsCircle* circleA, physicsCircle* circleB)
 {
@@ -145,21 +152,21 @@ bool circleCircleCollisionResponse(physicsCircle* circleA, physicsCircle* circle
 		return false;
 }
 
-bool circleHalfspaceCollision(physicsCircle* circle, physicsHalfspace* halfspace)
-{
-	Vector2 displacementToCircle = circle->position - halfspace->position;
-
-	float dotProduct = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
-	Vector2 vectorProjection = halfspace->getNormal() * dotProduct;
-	//float distance = Vector2Length(displacementToCircle);
-
-	DrawLineEx(circle->position, circle->position - vectorProjection, 1, GRAY);
-
-	Vector2 midpoint = circle->position - vectorProjection * 0.5f;
-	DrawText(TextFormat("D: %3.0f", dotProduct), midpoint.x, midpoint.y, 30, LIGHTGRAY);
-
-	return dotProduct < circle->radius;
-}
+//bool circleHalfspaceCollision(physicsCircle* circle, physicsHalfspace* halfspace)
+//{
+//	Vector2 displacementToCircle = circle->position - halfspace->position;
+//
+//	float dotProduct = Vector2DotProduct(displacementToCircle, halfspace->getNormal());
+//	Vector2 vectorProjection = halfspace->getNormal() * dotProduct;
+//	//float distance = Vector2Length(displacementToCircle);
+//
+//	DrawLineEx(circle->position, circle->position - vectorProjection, 1, GRAY);
+//
+//	Vector2 midpoint = circle->position - vectorProjection * 0.5f;
+//	DrawText(TextFormat("D: %3.0f", dotProduct), midpoint.x, midpoint.y, 30, LIGHTGRAY);
+//
+//	return dotProduct < circle->radius;
+//}
 
 bool circleHalfspaceCollisionResponse(physicsCircle* circle, physicsHalfspace* halfspace)
 {
@@ -180,6 +187,24 @@ bool circleHalfspaceCollisionResponse(physicsCircle* circle, physicsHalfspace* h
 	{
 		Vector2 mtv = halfspace->getNormal() * overlap;
 		circle->position += mtv;
+		Vector2 Fgravity = physicsSimulationObject.gravAccel * circle->mass;
+
+		Vector2 FgPerp = halfspace->getNormal() * Vector2DotProduct(Fgravity, halfspace->getNormal());
+		Vector2 Fnormal = FgPerp * -1;
+		circle->netForce += Fnormal;
+		DrawLineEx(circle->position, circle->position + Fnormal, 1, GREEN);
+
+		float u = circle->coefficientOfFriction;
+		float frictionMagnitude = u * Vector2Length(Fnormal);
+
+		Vector2 FgPara = Fgravity - FgPerp;
+		Vector2 frictionDir = Vector2Normalize(FgPara) * -1;
+
+		Vector2 Ffriction = frictionDir * frictionMagnitude;
+
+		circle->netForce += Ffriction;
+		DrawLineEx(circle->position, circle->position + Ffriction, 1, ORANGE);
+
 		return true;
 	}
 	else
@@ -192,7 +217,7 @@ void collision()
 {
 	for (int i = 0; i < pObjects.size(); i++)
 	{
-		pObjects[i]->color = GREEN;
+		//pObjects[i]->color = GREEN;
 	}
 	for (int i = 0; i < pObjects.size(); i++)
 	{
@@ -219,8 +244,8 @@ void collision()
 
 				if (didOverlap)
 				{
-					objectA->color = RED;
-					objectB->color = RED;
+					//objectA->color = RED;
+					//objectB->color = RED;
 				}
 			}
 		}
@@ -244,22 +269,62 @@ void deletion()
 	}
 }
 
-//Changes world state
-void update()
+void resetNetForces()
 {
-	physicsSimulationObject.time += physicsSimulationObject.deltaTime;
-	physicsSimulationObject.gravity = { gravMag * (float)cos(gravDir * DEG2RAD), -gravMag * (float)sin(gravDir * DEG2RAD) };
+	for (int i = 0; i < pObjects.size(); i++)
+	{
+		pObjects[i]->netForce = { 0, 0 };
+	}
+}
+
+void addGravForces()
+{
+	
+	//physicsSimulationObject.gravity = { gravMag * (float)cos(gravDir * DEG2RAD), -gravMag * (float)sin(gravDir * DEG2RAD) };
 	for (int i = 0; i < pObjects.size(); i++)
 	{
 		if (!pObjects[i]->staticBody)
 		{
-			pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
-			pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+
+			//pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
+			//pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+			Vector2 FGravity = physicsSimulationObject.gravAccel * pObjects[i]->mass;
+			pObjects[i]->netForce += FGravity;
 		}
 	}
+}
+
+void applyKinematics()
+{
+	for (int i = 0; i < pObjects.size(); i++)
+	{
+		if (!pObjects[i]->staticBody)
+		{
+
+			//pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
+			//pObjects[i]->velocity += physicsSimulationObject.gravity * physicsSimulationObject.deltaTime;
+			//Vector2 FGravity = physicsSimulationObject.gravAccel * pObjects[i]->mass;
+			//pObjects[i]->netForce += FGravity;
+			pObjects[i]->position += pObjects[i]->velocity * physicsSimulationObject.deltaTime;
+
+			Vector2 acceleration = pObjects[i]->netForce / pObjects[i]->mass;
+			
+			pObjects[i]->velocity += acceleration * physicsSimulationObject.deltaTime;
+			//DrawLineEx(pObjects[i]->position, pObjects[i]->position + pObjects[i]->netForce, 1, GRAY);
+			DrawLineEx(pObjects[i]->position, pObjects[i]->position + (physicsSimulationObject.gravAccel * pObjects[i]->mass), 1, PURPLE);
+		}
+	}
+}
+
+//Changes world state
+void update()
+{
+	physicsSimulationObject.time += physicsSimulationObject.deltaTime;
 	//vel = change in position / time, therefore change in position = vel * time
-	
-	
+	resetNetForces();
+	addGravForces();
+	collision();
+	applyKinematics();
 
 	//accel = deltaV / time (change in velocity over time) therefore deltaV = accel * time
 	
@@ -271,10 +336,40 @@ void update()
 	{
 		Vector2 velocity = {launchSpeed * (float)cos(launchAngle * DEG2RAD), -launchSpeed * (float)sin(launchAngle * DEG2RAD)};
 		float newRadius = 15;
-		physicsCircle* newCircle = new physicsCircle(launchPosition, velocity, newRadius);
+		Color newColor;
+		int newMass;
+		float newFric;
+		switch (ballType)
+		{
+		case 0:
+			newColor = RED;
+			newMass = 2;
+			newFric = 0.1f;
+			ballType++;
+			break;
+		case 1:
+			newColor = GREEN;
+			newMass = 2;
+			newFric = 0.8f;
+			ballType++;
+			break;
+		case 2:
+			newColor = BLUE;
+			newMass = 8;
+			newFric = 0.1f;
+			ballType++;
+			break;
+		case 3:
+			newColor = YELLOW;
+			newMass = 8;
+			newFric = 0.8f;
+			ballType = 0;
+			break;
+		}
+		physicsCircle* newCircle = new physicsCircle(launchPosition, velocity, newRadius, newFric, newMass, newColor);
 		pObjects.push_back(newCircle);
 	}
-	collision();
+	
 	deletion();
 }
 
@@ -292,9 +387,11 @@ void draw()
 
 	GuiSliderBar(Rectangle{ 10, 120, 500, 30 }, "Angle", TextFormat("Angle: %.0f Degrees", launchAngle), &launchAngle, 0, 360);
 
-	GuiSliderBar(Rectangle{ 10, 160, 500, 30 }, "Gravity Magnitude", TextFormat("Magnitude: %.0f", gravMag), &gravMag, -1000, 1000);
+	//GuiSliderBar(Rectangle{ 10, 160, 500, 30 }, "Gravity Magnitude", TextFormat("Magnitude: %.0f", gravMag), &gravMag, -1000, 1000);
 
-	GuiSliderBar(Rectangle{ 10, 200, 500, 30 }, "Gravity Direction", TextFormat("Direction: %.0f Degrees", gravDir), &gravDir, 0, 360);
+	//GuiSliderBar(Rectangle{ 10, 200, 500, 30 }, "Gravity Direction", TextFormat("Direction: %.0f Degrees", gravDir), &gravDir, 0, 360);
+
+	GuiSliderBar(Rectangle{ 10, 160, 500, 30 }, "Gravity Magnitude", TextFormat("Magnitude: %.0f", physicsSimulationObject.gravAccel.y), &physicsSimulationObject.gravAccel.y, -1000, 1000);
 
 	GuiSliderBar(Rectangle{ 10, 240, 500, 30 }, "Halfspace X", TextFormat("Halfspace X: %.0f", halfspace.position.x), &halfspace.position.x, 0, GetScreenWidth());
 
@@ -307,12 +404,24 @@ void draw()
 	DrawText(TextFormat("Object Count: %i", pObjects.size()), GetScreenWidth() - 300, 100, 30, LIGHTGRAY);
 	DrawText(TextFormat("T: %6.2f", physicsSimulationObject.time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
 
-	Vector2 startPos = { 100, GetScreenHeight() - 100 };
+	//Vector2 startPos = { 100, GetScreenHeight() - 100 };
 	Vector2 velocity = { launchSpeed * cos(launchAngle * DEG2RAD), -launchSpeed * sin(launchAngle * DEG2RAD)};
 
 	DrawLineEx(launchPosition, launchPosition + velocity, 3, RED);
 	for (int i = 0; i < pObjects.size(); i++)
 	{
+		/*float mass = 1;
+		Vector2 Fgravity = physicsSimulationObject.gravity * mass;
+		DrawLine(pObjects[i]->position.x, pObjects[i]->position.y, pObjects[i]->position.x + Fgravity.x, pObjects[i]->position.y + Fgravity.y, PURPLE);
+		
+		
+
+		Vector2 FgPara = Fgravity - FgPerp;
+		Vector2 Ffriction = FgPara * -1;
+		DrawLine(pObjects[i]->position.x, pObjects[i]->position.y, pObjects[i]->position.x + Ffriction.x, pObjects[i]->position.y + Ffriction.y, ORANGE);
+		
+		pObjects[i]->velocity += Ffriction;*/
+
 		pObjects[i]->draw();
 	}
 
@@ -328,10 +437,10 @@ int main()
 	halfspace.setRotation(315);
 	pObjects.push_back(&halfspace);
 
-	halfspace2.position = { 400, 600 };
+	/*halfspace2.position = {400, 600};
 	halfspace2.staticBody = true;
 	halfspace2.setRotation(45);
-	pObjects.push_back(&halfspace2);
+	pObjects.push_back(&halfspace2);*/
 
 	while (!WindowShouldClose()) // Loops TARGET_FPS times per second
 	{
